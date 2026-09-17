@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}Upload Question Paper - Secure Question Paper Management System{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 2rem auto;">
+    <div class="card">
+        <h2 style="margin-bottom: 2rem;">Upload Question Paper</h2>
+        
+        {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="title">Question Paper Title</label>
+                <input type="text" id="title" name="title" required placeholder="e.g., Mathematics Final Exam 2026">
+            </div>
+
+            <div class="form-group">
+                <label for="subject">Subject</label>
+                <input type="text" id="subject" name="subject" required placeholder="e.g., Mathematics, Physics, etc.">
+            </div>
+
+            <div class="form-group">
+                <label for="exam_date">Examination Date & Time</label>
+                <input type="datetime-local" id="exam_date" name="exam_date" required>
+                <small style="color: #666; margin-top: 0.5rem; display: block;">Question paper will be locked until this date/time</small>
+            </div>
+
+            <div class="form-group">
+                <label for="file">Upload Question Paper (PDF)</label>
+                <input type="file" id="file" name="file" accept=".pdf,.doc,.docx" required>
+                <small style="color: #666; margin-top: 0.5rem; display: block;">Supported formats: PDF, DOC, DOCX (Max 10MB)</small>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; padding: 1rem;">Upload & Encrypt</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary" style="width: 100%; padding: 1rem; text-align: center; margin-top: 1rem;">Cancel</a>
+        </form>
+    </div>
+
+    <div style="margin-top: 2rem; padding: 1.5rem; background-color: #f0f0f0; border-radius: 4px;">
+        <h3 style="margin-bottom: 1rem;">What happens when you upload?</h3>
+        <ol style="padding-left: 2rem; line-height: 1.8;">
+            <li>Your file is encrypted before it is stored</li>
+            <li>A cryptographic hash (SHA-256) is generated for integrity verification</li>
+            <li>The encrypted file is stored in the configured database (local or cloud)</li>
+            <li>Metadata is logged in the audit trail</li>
+            <li>The paper is locked until the exam date/time you specify</li>
+            <li>Only authorized reviewers can approve the paper</li>
+            <li>Only authorized exam officers can release it</li>
+        </ol>
+    </div>
+</div>
+{% endblock %}

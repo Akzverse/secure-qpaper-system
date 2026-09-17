@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Users - Secure Question Paper Management System{% endblock %}
+
+{% block content %}
+<div>
+    <h1 style="margin-bottom: 2rem;">User Management</h1>
+
+    <div class="card">
+        <h2 style="margin-bottom: 1rem;">System Users</h2>
+        
+        {% if users %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Last Login</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td><strong>{{ user.username }}</strong></td>
+                    <td>{{ user.email }}</td>
+                    <td>
+                        <span style="background-color: #e9ecef; padding: 0.25rem 0.75rem; border-radius: 3px; font-size: 0.85rem;">
+                            {{ user.role.replace('_', ' ').title() }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if user.is_active %}
+                        <span style="color: #28a745;">✓ Active</span>
+                        {% else %}
+                        <span style="color: #dc3545;">✗ Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.last_login %}
+                        {{ user.last_login.strftime('%Y-%m-%d %H:%M') }}
+                        {% else %}
+                        <span style="color: #999;">Never</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.created_at.strftime('%Y-%m-%d') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #999; text-align: center; padding: 2rem;">No users found.</p>
+        {% endif %}
+    </div>
+
+    <div style="margin-top: 2rem; padding: 1.5rem; background-color: #f0f0f0; border-radius: 4px;">
+        <h3 style="margin-bottom: 1rem;">User Roles & Permissions</h3>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+            <div>
+                <h4 style="margin-bottom: 0.5rem;">Question Setter</h4>
+                <ul style="font-size: 0.9rem; line-height: 1.6;">
+                    <li>Create & upload question papers</li>
+                    <li>Edit own papers</li>
+                    <li>View own papers</li>
+                </ul>
+            </div>
+            <div>
+                <h4 style="margin-bottom: 0.5rem;">Reviewer</h4>
+                <ul style="font-size: 0.9rem; line-height: 1.6;">
+                    <li>View all question papers</li>
+                    <li>Approve papers</li>
+                    <li>Reject papers</li>
+                </ul>
+            </div>
+            <div>
+                <h4 style="margin-bottom: 0.5rem;">Exam Officer</h4>
+                <ul style="font-size: 0.9rem; line-height: 1.6;">
+                    <li>View approved papers</li>
+                    <li>Release papers at scheduled time</li>
+                    <li>Distribute to exam centers</li>
+                </ul>
+            </div>
+            <div>
+                <h4 style="margin-bottom: 0.5rem;">Administrator</h4>
+                <ul style="font-size: 0.9rem; line-height: 1.6;">
+                    <li>Manage all users</li>
+                    <li>View audit logs</li>
+                    <li>System configuration</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

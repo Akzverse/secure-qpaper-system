@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Secure Question Paper Management System{% endblock %}
+
+{% block content %}
+<div>
+    <h1 style="margin-bottom: 2rem;">Dashboard</h1>
+
+    <div class="card">
+        <h2 style="margin-bottom: 1rem;">Your Question Papers</h2>
+        
+        {% if qpapers %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Subject</th>
+                    <th>Created</th>
+                    <th>Exam Date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for qpaper in qpapers %}
+                <tr>
+                    <td><strong>{{ qpaper.title }}</strong></td>
+                    <td>{{ qpaper.subject }}</td>
+                    <td>{{ qpaper.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>{{ qpaper.exam_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>
+                        <span class="status-badge status-{{ qpaper.status }}">
+                            {{ qpaper.status.upper() }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if qpaper.exam_date <= now() or qpaper.is_released %}
+                        <a href="{{ url_for('view_qpaper', qpaper_id=qpaper.id) }}" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">View</a>
+                        {% else %}
+                        <span style="color: #999;">Locked</span>
+                        {% endif %}
+                        
+                        {% if session.role == 'reviewer' and qpaper.status == 'draft' %}
+                        <button class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.85rem;" onclick="approveQpaper('{{ qpaper.id }}')">Approve</button>
+                        {% endif %}
+                        
+                        {% if session.role == 'exam_officer' and qpaper.status == 'approved' and not qpaper.is_released %}
+                        <button class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.85rem;" onclick="releaseQpaper('{{ qpaper.id }}')">Release</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #999; text-align: center; padding: 2rem;">No question papers found.</p>
+        {% endif %}
+    </div>
+
+    <div style="margin-top: 2rem; padding: 1.5rem; background-color: #e7f3ff; border-radius: 4px;">
+        <h3 style="margin-bottom: 1rem;">System Status</h3>
+        <ul style="list-style: none; padding: 0;">
+            <li style="padding: 0.5rem 0;">✓ Authenticated File Encryption: Active</li>
+            <li style="padding: 0.5rem 0;">✓ SHA-256 Integrity Verification: Active</li>
+            <li style="padding: 0.5rem 0;">✓ Role-Based Access Control: Active</li>
+            <li style="padding: 0.5rem 0;">✓ Audit Logging: Active</li>
+            <li style="padding: 0.5rem 0;">✓ Time-Based Release Control: Active</li>
+            <li style="padding: 0.5rem 0;">✓ Session Security: Active</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+function approveQpaper(qpaperId) {
+    if (confirm('Approve this question paper?')) {
+        fetch(`/qpaper/${qpaperId}/approve`, {
+            method: 'POST'
+        }).then(response => {
+            if (response.ok) {
+                alert('Question paper approved successfully!');
+                location.reload();
+            } else {
+                alert('Error approving question paper');
+            }
+        });
+    }
+}
+
+function releaseQpaper(qpaperId) {
+    if (confirm('Release this question paper? This action cannot be undone.')) {
+        fetch(`/qpaper/${qpaperId}/release`, {
+            method: 'POST'
+        }).then(response => {
+            if (response.ok) {
+                alert('Question paper released successfully!');
+                location.reload();
+            } else {
+                alert('Error releasing question paper');
+            }
+        });
+    }
+}
+
+function now() {
+    return new Date();
+}
+</script>
+{% endblock %}

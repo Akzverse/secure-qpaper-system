@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="720" viewBox="0 0 1100 720">
+  <style>text{font-family:Arial,sans-serif;fill:#123047}.t{font-size:18px;font-weight:bold}.s{font-size:14px}.box{fill:#eef7fb;stroke:#1a5276;stroke-width:2}.sec{fill:#eaf7ee;stroke:#218838;stroke-width:2}.cloud{fill:#f4effb;stroke:#6941a5;stroke-width:2}.arr{stroke:#496b7b;stroke-width:3;marker-end:url(#a)}</style>
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3z" fill="#496b7b"/></marker></defs>
+  <text x="550" y="35" text-anchor="middle" class="t" font-size="24">Secure Cloud Question-Paper Management System</text>
+  <rect class="box" x="405" y="65" width="290" height="70" rx="12"/><text x="550" y="95" text-anchor="middle" class="t">Authorized Users</text><text x="550" y="117" text-anchor="middle" class="s">Setter • Reviewer • Admin • Exam Officer</text>
+  <line class="arr" x1="550" y1="135" x2="550" y2="175"/><rect class="sec" x="405" y="180" width="290" height="55" rx="12"/><text x="550" y="213" text-anchor="middle" class="t">Login + RBAC + Session Control</text>
+  <line class="arr" x1="550" y1="235" x2="550" y2="275"/><rect class="box" x="405" y="280" width="290" height="65" rx="12"/><text x="550" y="309" text-anchor="middle" class="t">Flask Secure Web Application</text><text x="550" y="331" text-anchor="middle" class="s">HTTPS on Render • audit logging</text>
+  <line class="arr" x1="460" y1="345" x2="265" y2="405"/><line class="arr" x1="640" y1="345" x2="835" y2="405"/>
+  <rect class="sec" x="105" y="410" width="320" height="82" rx="12"/><text x="265" y="442" text-anchor="middle" class="t">Encryption + Integrity</text><text x="265" y="465" text-anchor="middle" class="s">Fernet encrypted file • SHA-256 hash</text>
+  <rect class="box" x="675" y="410" width="320" height="82" rx="12"/><text x="835" y="442" text-anchor="middle" class="t">Audit and Monitoring</text><text x="835" y="465" text-anchor="middle" class="s">login, upload, approval, release events</text>
+  <line class="arr" x1="265" y1="492" x2="420" y2="555"/><line class="arr" x1="835" y1="492" x2="680" y2="555"/>
+  <rect class="cloud" x="365" y="560" width="370" height="75" rx="12"/><text x="550" y="592" text-anchor="middle" class="t">Supabase Cloud PostgreSQL</text><text x="550" y="615" text-anchor="middle" class="s">encrypted content, metadata, users, audit logs</text>
+  <line class="arr" x1="550" y1="635" x2="550" y2="680"/><text x="550" y="707" text-anchor="middle" class="t">Time-based controlled release → Authorized exam centre</text>
+</svg>

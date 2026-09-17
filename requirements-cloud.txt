@@ -1,0 +1,2 @@
+# Required only when DATABASE_URL points to Supabase/PostgreSQL on Render.
+psycopg[binary]==3.2.3

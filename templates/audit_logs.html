@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+
+{% block title %}Audit Logs - Secure Question Paper Management System{% endblock %}
+
+{% block content %}
+<div>
+    <h1 style="margin-bottom: 2rem;">Audit Logs</h1>
+
+    <div class="card">
+        <p style="margin-bottom: 1.5rem; color: #666;">All system activities are logged for security monitoring and compliance.</p>
+        
+        {% if logs %}
+        <table style="font-size: 0.9rem;">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Resource</th>
+                    <th>Status</th>
+                    <th>IP Address</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.timestamp }}</td>
+                    <td><strong>{{ log.username }}</strong></td>
+                    <td>{{ log.action }}</td>
+                    <td><code style="background-color: #f0f0f0; padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.85rem;">{{ log.resource }}</code></td>
+                    <td>
+                        {% if log.status == 'success' %}
+                        <span style="color: #28a745;">✓ {{ log.status }}</span>
+                        {% elif log.status == 'failure' %}
+                        <span style="color: #dc3545;">✗ {{ log.status }}</span>
+                        {% else %}
+                        <span style="color: #ffc107;">⚠ {{ log.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td><code style="background-color: #f0f0f0; padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.85rem;">{{ log.ip }}</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #999; text-align: center; padding: 2rem;">No audit logs found.</p>
+        {% endif %}
+    </div>
+
+    <div style="margin-top: 2rem; padding: 1.5rem; background-color: #f0f0f0; border-radius: 4px;">
+        <h3 style="margin-bottom: 1rem;">Logged Events</h3>
+        <ul style="columns: 2; gap: 2rem;">
+            <li>User registration</li>
+            <li>User login/logout</li>
+            <li>Question paper uploads</li>
+            <li>Document approvals</li>
+            <li>Document releases</li>
+            <li>Document access attempts</li>
+            <li>Failed access attempts</li>
+            <li>Unauthorized access attempts</li>
+            <li>Integrity check failures</li>
+            <li>Permission violations</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
