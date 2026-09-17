@@ -1,0 +1,2 @@
+# Preserve the submission architecture PDF exactly as created.
+*.pdf binary
