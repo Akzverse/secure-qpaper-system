@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: secure-qpaper-system
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt -r requirements-cloud.txt
+    startCommand: gunicorn app:app
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: SESSION_COOKIE_SECURE
+        value: "True"
+      - key: SESSION_COOKIE_HTTPONLY
+        value: "True"
+      - key: SESSION_COOKIE_SAMESITE
+        value: "Lax"

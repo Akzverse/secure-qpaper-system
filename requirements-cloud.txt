@@ -1,2 +1,2 @@
-# Required only when DATABASE_URL points to Supabase/PostgreSQL on Render.
-psycopg[binary]>=3.2.10
+# Required when DATABASE_URL points to Supabase/PostgreSQL on Render or other cloud hosts.
+psycopg[binary]>=3.2.0

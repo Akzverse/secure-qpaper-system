@@ -17,17 +17,28 @@ load_dotenv()
 
 app = Flask(__name__)
 database_url = os.getenv('DATABASE_URL', 'sqlite:///qpaper_system.db')
-# Some cloud dashboards provide the older postgres:// scheme. SQLAlchemy needs
-# the explicit PostgreSQL driver name used by this project.
+# Standardize Postgres URLs to use installed dialect (psycopg or psycopg2)
 if database_url.startswith('postgres://'):
-    database_url = database_url.replace('postgres://', 'postgresql+psycopg://', 1)
-elif database_url.startswith('postgresql://'):
-    database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
+if database_url.startswith('postgresql://'):
+    try:
+        import psycopg  # noqa: F401
+        database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
+    except ImportError:
+        try:
+            import psycopg2  # noqa: F401
+            database_url = database_url.replace('postgresql://', 'postgresql+psycopg2://', 1)
+        except ImportError:
+            pass
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'local-development-only-change-me')
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300
+}
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
 app.config['SESSION_COOKIE_HTTPONLY'] = os.getenv('SESSION_COOKIE_HTTPONLY', 'True').lower() == 'true'
@@ -89,13 +100,30 @@ def get_encryption_key():
     """
     configured_key = os.getenv('ENCRYPTION_KEY')
     if configured_key:
+        configured_key = configured_key.strip()
+        # Try URL-safe base64 / standard base64 decoding with auto-padding
         try:
-            key = base64.urlsafe_b64decode(configured_key.encode('utf-8'))
-        except Exception as exc:
-            raise ValueError('ENCRYPTION_KEY must be Base64-encoded.') from exc
-        if len(key) != 32:
-            raise ValueError('ENCRYPTION_KEY must decode to exactly 32 bytes.')
-        return key
+            padded_key = configured_key + '=' * (-len(configured_key) % 4)
+            key = base64.urlsafe_b64decode(padded_key.encode('utf-8'))
+            if len(key) == 32:
+                return key
+        except Exception:
+            pass
+
+        # Try 64-char hexadecimal string
+        if len(configured_key) == 64:
+            try:
+                key = bytes.fromhex(configured_key)
+                if len(key) == 32:
+                    return key
+            except Exception:
+                pass
+
+        # Try raw 32-byte string
+        if len(configured_key.encode('utf-8')) == 32:
+            return configured_key.encode('utf-8')
+
+        raise ValueError('ENCRYPTION_KEY must decode to exactly 32 bytes (Base64-encoded or 64-character hex).')
 
     key_file = 'encryption.key'
     if os.path.exists(key_file):
@@ -108,6 +136,14 @@ def get_encryption_key():
     with open(key_file, 'wb') as f:
         f.write(key)
     return key
+
+def is_in_future(target_dt):
+    """Safely check if a datetime is in the future, handling naive and timezone-aware datetimes."""
+    if target_dt is None:
+        return False
+    if target_dt.tzinfo is not None:
+        return target_dt > datetime.now(timezone.utc)
+    return target_dt > datetime.now(timezone.utc).replace(tzinfo=None)
 
 def encrypt_file(file_content, key):
     """AES-256-CTR encrypt, then authenticate encrypted data with HMAC-SHA-256."""
@@ -166,7 +202,10 @@ def init_permissions():
         for perm in perms:
             if not RolePermission.query.filter_by(role=role, permission=perm).first():
                 db.session.add(RolePermission(role=role, permission=perm))
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 # ============= AUTHENTICATION & AUTHORIZATION =============
 
@@ -177,7 +216,7 @@ def require_login(f):
             log_action(None, 'unauthorized_access', 'auth', status='failure')
             return redirect(url_for('login'))
         
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         if not user or not user.is_active:
             session.clear()
             return redirect(url_for('login'))
@@ -192,9 +231,10 @@ def require_role(*roles):
             if 'user_id' not in session:
                 return redirect(url_for('login'))
             
-            user = User.query.get(session['user_id'])
-            if user.role not in roles:
-                log_action(user.id, 'unauthorized_role_access', 'auth', status='failure')
+            user = db.session.get(User, session['user_id'])
+            if not user or user.role not in roles:
+                user_id = user.id if user else session.get('user_id')
+                log_action(user_id, 'unauthorized_role_access', 'auth', status='failure')
                 return jsonify({'error': 'Insufficient permissions'}), 403
             
             return f(*args, **kwargs)
@@ -210,10 +250,19 @@ def before_request():
 @app.route('/health', methods=['GET'])
 def health():
     """Small health endpoint used by a cloud host to confirm the app is alive."""
+    db_connected = False
+    try:
+        from sqlalchemy import text
+        db.session.execute(text('SELECT 1'))
+        db_connected = True
+    except Exception:
+        db_connected = False
+
     return jsonify({
         'status': 'ok',
-        'database': 'cloud-postgresql' if database_url.startswith('postgresql+') else 'local-sqlite'
-    })
+        'database': 'cloud-postgresql' if 'postgresql' in database_url else 'local-sqlite',
+        'database_connected': db_connected
+    }), 200
 
 @app.route('/', methods=['GET'])
 def index():
@@ -291,7 +340,7 @@ def logout():
 @require_login
 def dashboard():
     user_id = session['user_id']
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     
     if user.role == 'question_setter':
         qpapers = QuestionPaper.query.filter_by(created_by=user_id).all()
@@ -302,7 +351,9 @@ def dashboard():
     else:
         qpapers = QuestionPaper.query.all()
     
-    return render_template('dashboard.html', user=user, qpapers=qpapers, now=datetime.now)
+    # Supply naive UTC now for consistent comparison in Jinja template
+    utc_now = lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    return render_template('dashboard.html', user=user, qpapers=qpapers, now=utc_now)
 
 @app.route('/upload', methods=['GET', 'POST'])
 @require_login
@@ -324,6 +375,10 @@ def upload_qpaper():
             if not file_content or extension not in allowed_extensions:
                 return render_template('upload.html', error='Upload a non-empty PDF, DOC, or DOCX file.')
             
+            parsed_exam_date = datetime.fromisoformat(exam_date)
+            if parsed_exam_date.tzinfo is not None:
+                parsed_exam_date = parsed_exam_date.astimezone(timezone.utc).replace(tzinfo=None)
+
             encryption_key = get_encryption_key()
             encrypted_content = encrypt_file(file_content, encryption_key)
             file_hash = generate_file_hash(file_content)
@@ -334,7 +389,7 @@ def upload_qpaper():
                 encrypted_content=encrypted_content,
                 file_hash=file_hash,
                 created_by=session['user_id'],
-                exam_date=datetime.fromisoformat(exam_date),
+                exam_date=parsed_exam_date,
                 # The actual key is held in an environment variable (cloud) or
                 # the git-ignored local key file, never inside the database.
                 encryption_key='environment-managed'
@@ -353,13 +408,13 @@ def upload_qpaper():
 @app.route('/qpaper/<qpaper_id>/view', methods=['GET'])
 @require_login
 def view_qpaper(qpaper_id):
-    qpaper = QuestionPaper.query.get(qpaper_id)
+    qpaper = db.session.get(QuestionPaper, qpaper_id)
     
     if not qpaper:
         return jsonify({'error': 'Question paper not found'}), 404
     
     user_id = session['user_id']
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     
     # Role-based access control
     if user.role == 'question_setter' and qpaper.created_by != user_id:
@@ -371,7 +426,7 @@ def view_qpaper(qpaper_id):
         return jsonify({'error': 'Question paper not yet approved for release'}), 403
     
     # Check time-based release
-    if not qpaper.is_released and qpaper.exam_date > datetime.now():
+    if not qpaper.is_released and is_in_future(qpaper.exam_date):
         log_action(user_id, 'premature_qpaper_access_attempt', 'question_paper', qpaper_id, status='failure')
         return jsonify({'error': 'Question paper cannot be accessed before exam date'}), 403
     
@@ -400,7 +455,7 @@ def view_qpaper(qpaper_id):
 @require_login
 @require_role('reviewer')
 def approve_qpaper(qpaper_id):
-    qpaper = QuestionPaper.query.get(qpaper_id)
+    qpaper = db.session.get(QuestionPaper, qpaper_id)
     
     if not qpaper:
         return jsonify({'error': 'Question paper not found'}), 404
@@ -415,7 +470,7 @@ def approve_qpaper(qpaper_id):
 @require_login
 @require_role('exam_officer')
 def release_qpaper(qpaper_id):
-    qpaper = QuestionPaper.query.get(qpaper_id)
+    qpaper = db.session.get(QuestionPaper, qpaper_id)
     
     if not qpaper:
         return jsonify({'error': 'Question paper not found'}), 404
@@ -423,12 +478,12 @@ def release_qpaper(qpaper_id):
     if qpaper.status != 'approved':
         return jsonify({'error': 'Question paper must be approved before release'}), 403
 
-    if qpaper.exam_date > datetime.now():
+    if is_in_future(qpaper.exam_date):
         log_action(session['user_id'], 'premature_release_attempt', 'question_paper', qpaper_id, status='failure')
         return jsonify({'error': 'Question paper cannot be released before the scheduled exam date'}), 403
     
     qpaper.is_released = True
-    qpaper.released_at = datetime.utcnow()
+    qpaper.released_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.session.commit()
     
     log_action(session['user_id'], 'qpaper_released', 'question_paper', qpaper_id)
@@ -442,7 +497,7 @@ def audit_logs():
     
     logs_data = []
     for log in logs:
-        user = User.query.get(log.user_id)
+        user = db.session.get(User, log.user_id)
         logs_data.append({
             'timestamp': log.timestamp.isoformat(),
             'username': user.username if user else 'System',
@@ -475,21 +530,25 @@ def internal_error(error):
 # ============= DATABASE INITIALIZATION =============
 
 def init_db():
-    with app.app_context():
-        db.create_all()
-        init_permissions()
-        
-        # Create default admin user if not exists
-        if not User.query.filter_by(username='admin').first():
-            admin = User(
-                username='admin',
-                email='admin@qpaper.local',
-                password=generate_password_hash('admin@123'),
-                role='admin'
-            )
-            db.session.add(admin)
-            db.session.commit()
-            print("Admin user created: username=admin, password=admin@123")
+    try:
+        with app.app_context():
+            db.create_all()
+            init_permissions()
+            
+            # Create default admin user if not exists
+            if not User.query.filter_by(username='admin').first():
+                admin = User(
+                    username='admin',
+                    email='admin@qpaper.local',
+                    password=generate_password_hash('admin@123'),
+                    role='admin'
+                )
+                db.session.add(admin)
+                db.session.commit()
+                print("Admin user created: username=admin, password=admin@123")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[WARN] Database initialization notice: {e}")
 
 init_db()
 

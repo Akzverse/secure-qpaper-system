@@ -5,3 +5,4 @@ python-dotenv==1.0.0
 Werkzeug==2.3.7
 pyaes==1.6.1
 gunicorn==23.0.0
+psycopg[binary]>=3.2.0; sys_platform == 'linux'
