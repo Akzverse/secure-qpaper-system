@@ -41,10 +41,14 @@ if ('supabase.co' in database_url or 'supabase.com' in database_url) and 'sslmod
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'local-development-only-change-me')
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+engine_options = {
     'pool_pre_ping': True,
     'pool_recycle': 300
 }
+if 'postgresql' in database_url:
+    engine_options['connect_args'] = {'prepare_threshold': None}
+
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
 app.config['SESSION_COOKIE_HTTPONLY'] = os.getenv('SESSION_COOKIE_HTTPONLY', 'True').lower() == 'true'
@@ -250,27 +254,35 @@ def require_role(*roles):
         return decorated_function
     return decorator
 
+_db_initialized = False
+
 # ============= ROUTES =============
 
 @app.before_request
 def before_request():
     session.permanent = True
+    if not _db_initialized and not request.path.startswith('/static'):
+        ensure_db_initialized()
 
 @app.route('/health', methods=['GET'])
 def health():
     """Small health endpoint used by a cloud host to confirm the app is alive."""
     db_connected = False
+    db_error = None
     try:
+        ensure_db_initialized()
         from sqlalchemy import text
         db.session.execute(text('SELECT 1'))
         db_connected = True
-    except Exception:
+    except Exception as e:
         db_connected = False
+        db_error = str(e)
 
     return jsonify({
         'status': 'ok',
         'database': 'cloud-postgresql' if 'postgresql' in database_url else 'local-sqlite',
-        'database_connected': db_connected
+        'database_connected': db_connected,
+        'database_error': db_error
     }), 200
 
 @app.route('/', methods=['GET'])
@@ -316,7 +328,14 @@ def login():
         password = request.form.get('password')
         mfa_code = request.form.get('mfa_code', '')
         
-        user = User.query.filter_by(username=username).first()
+        try:
+            user = User.query.filter_by(username=username).first()
+        except Exception as e:
+            ensure_db_initialized()
+            try:
+                user = User.query.filter_by(username=username).first()
+            except Exception as e2:
+                return render_template('login.html', error=f"Database error: {str(e2)}")
         
         if not user or not check_password_hash(user.password, password):
             log_action(None, 'failed_login', 'auth', details=f'username: {username}', status='failure')
@@ -533,12 +552,22 @@ def not_found(error):
 
 @app.errorhandler(500)
 def internal_error(error):
-    db.session.rollback()
-    return jsonify({'error': 'Internal server error'}), 500
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+    if request.path.startswith('/api/') or request.is_json:
+        return jsonify({'error': 'Internal server error'}), 500
+    return render_template('login.html', error='A system error occurred. Please try again.'), 500
 
 # ============= DATABASE INITIALIZATION =============
 
-def init_db():
+_db_initialized = False
+
+def ensure_db_initialized():
+    global _db_initialized
+    if _db_initialized:
+        return True
     with app.app_context():
         try:
             db.create_all()
@@ -555,12 +584,18 @@ def init_db():
                 db.session.add(admin)
                 db.session.commit()
                 print("Admin user created: username=admin, password=admin@123")
+            _db_initialized = True
+            return True
         except Exception as e:
             try:
                 db.session.rollback()
             except Exception:
                 pass
             print(f"[WARN] Database initialization notice: {e}")
+            return False
+
+def init_db():
+    return ensure_db_initialized()
 
 init_db()
 
