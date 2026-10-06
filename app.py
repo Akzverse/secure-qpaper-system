@@ -16,6 +16,8 @@ import pyaes
 load_dotenv()
 
 app = Flask(__name__)
+os.makedirs(app.instance_path, exist_ok=True)
+
 database_url = os.getenv('DATABASE_URL', 'sqlite:///qpaper_system.db')
 # Standardize Postgres URLs to use installed dialect (psycopg or psycopg2)
 if database_url.startswith('postgres://'):
@@ -31,6 +33,10 @@ if database_url.startswith('postgresql://'):
             database_url = database_url.replace('postgresql://', 'postgresql+psycopg2://', 1)
         except ImportError:
             pass
+
+if ('supabase.co' in database_url or 'supabase.com' in database_url) and 'sslmode' not in database_url:
+    separator = '&' if '?' in database_url else '?'
+    database_url = f"{database_url}{separator}sslmode=require"
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'local-development-only-change-me')
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
@@ -175,13 +181,16 @@ def log_action(user_id, action, resource_type, resource_id=None, details=None, s
         if user_id is None:
             return
         
+        from flask import has_request_context
+        remote_ip = request.remote_addr if has_request_context() else None
+
         log_entry = AuditLog(
             user_id=user_id,
             action=action,
             resource_type=resource_type,
             resource_id=resource_id,
             details=details,
-            ip_address=request.remote_addr,
+            ip_address=remote_ip,
             status=status
         )
         db.session.add(log_entry)
@@ -530,8 +539,8 @@ def internal_error(error):
 # ============= DATABASE INITIALIZATION =============
 
 def init_db():
-    try:
-        with app.app_context():
+    with app.app_context():
+        try:
             db.create_all()
             init_permissions()
             
@@ -546,9 +555,12 @@ def init_db():
                 db.session.add(admin)
                 db.session.commit()
                 print("Admin user created: username=admin, password=admin@123")
-    except Exception as e:
-        db.session.rollback()
-        print(f"[WARN] Database initialization notice: {e}")
+        except Exception as e:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            print(f"[WARN] Database initialization notice: {e}")
 
 init_db()
 
