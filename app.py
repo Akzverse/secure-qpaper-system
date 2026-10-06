@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 import os
 import io
 import uuid
+import urllib.parse
 from dotenv import load_dotenv
 import pyaes
 
@@ -18,10 +19,31 @@ load_dotenv()
 app = Flask(__name__)
 os.makedirs(app.instance_path, exist_ok=True)
 
+def sanitize_database_url(url):
+    """Ensure passwords containing '@' or special characters are safely percent-encoded."""
+    if not ('://' in url and '@' in url):
+        return url
+    prefix, rest = url.split('://', 1)
+    if '/' in rest:
+        auth, path = rest.split('/', 1)
+        path = '/' + path
+    else:
+        auth, path = rest, ''
+    
+    if '@' in auth:
+        userinfo, host_port = auth.rsplit('@', 1)
+        if ':' in userinfo:
+            user, password = userinfo.split(':', 1)
+            unquoted = urllib.parse.unquote(password)
+            quoted_password = urllib.parse.quote(unquoted, safe='')
+            return f"{prefix}://{user}:{quoted_password}@{host_port}{path}"
+    return url
+
 database_url = os.getenv('DATABASE_URL', 'sqlite:///qpaper_system.db')
-# Standardize Postgres URLs to use installed dialect (psycopg or psycopg2)
 if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
+database_url = sanitize_database_url(database_url)
 
 if database_url.startswith('postgresql://'):
     try:
